@@ -5,9 +5,11 @@ date: "2022-12-3"
 output: github_document
 ---
 
+# Apply package and inital setup
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(p8105.datasets)
+library(purrr)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -27,3 +29,73 @@ scale_fill_discrete = scale_fill_viridis_d
 
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
 ```
+
+
+# Problem 2
+
+### Import and Clean the homicide dataset
+```{r}
+url <- "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
+homicide_data <- read_csv(url) %>% 
+  janitor::clean_names() %>%
+  mutate(
+    resolved = as.numeric(disposition == "Closed by arrest"),
+    victim_age = as.numeric(victim_age),
+    victim_race = fct_relevel(victim_race, "White")) %>% 
+  unite("city_state", c(city, state), sep = ", ", remove = FALSE) %>% 
+  filter(!(victim_race == "Unknown" | city_state == "Tulsa, AL")) %>% 
+  filter(victim_race %in% c("White", "Black"))
+```
+
+After convert variable victim_age into numerical variable, it is worth to note that there is `r sum(is.na(homicide_data$victim_age))` number of missing value of victim age.
+
+### GLM for city of Baltimore, MD
+```{r}
+baltimore_logistic <- 
+  homicide_data %>% 
+  filter(city_state == "Baltimore, MD") %>% 
+  glm(resolved ~ victim_race + victim_age + victim_sex, data = ., family = binomial())
+
+
+baltimore_logistic %>% 
+  broom::tidy(conf.int = TRUE) %>% 
+  mutate(OR = exp(estimate),
+         conf.low = exp(conf.low),
+         conf.high = exp(conf.high)) %>%
+  select(term, log_OR = estimate, OR, contains("conf")) %>% 
+  filter(term == "victim_sexMale")
+  
+```
+
+### GLM for all cities in homicide dataset
+```{r}
+nest_logistic_res =
+  homicide_data %>% 
+  nest(data = -city_state) %>% 
+  mutate(
+    models = purrr::map(data, ~glm(resolved ~ victim_race + victim_age + victim_sex, data = .x, family = binomial())),
+    result = map(models, ~broom::tidy(.x, conf.int = TRUE))) %>% 
+  unnest(result) %>% 
+  mutate(
+   OR = exp(estimate),
+         conf.low = exp(conf.low),
+         conf.high = exp(conf.high)) %>% 
+  select(city_state, term, OR, contains("conf")) %>% 
+  filter(term == "victim_sexMale") 
+```
+
+
+### plot
+```{r}
+nest_logistic_res %>% 
+  mutate(
+    city_state = forcats::fct_reorder(city_state, OR)) %>% 
+  ggplot(aes(x = city_state, y = OR)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "Estimated ORs & CIs for Solving Homicides Comparing Male Victims to Female Victims",
+       y = "Estimated ORs")
+
+```
+
