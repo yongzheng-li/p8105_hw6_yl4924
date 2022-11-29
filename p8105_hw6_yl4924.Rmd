@@ -6,7 +6,7 @@ output: github_document
 ---
 
 # Apply package and inital setup
-```{r setup, include=FALSE}
+```{r}
 library(tidyverse)
 library(p8105.datasets)
 library(purrr)
