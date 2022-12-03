@@ -99,3 +99,8 @@ nest_logistic_res %>%
 
 ```
 
+From the plot, New York, NY has the lowest estimated OR for solving homicides comparing male victims to female victims(around 0.25). City Albuquerque, NM has the highest OR for solving homicides comparing male victims to female victims(around 1.75). No city solving homicides for males victims is significantly higher than solving homicides for female victims. In contrast, there is `r sum(nest_logistic_res$conf.high <1)` number of cities solving homicides for males victims is significantly lower than solving homicides for female victims.
+
+
+# Problem 3
+
