@@ -8,8 +8,9 @@ output: github_document
 # Apply package and inital setup
 ```{r}
 library(tidyverse)
-library(p8105.datasets)
 library(purrr)
+library(modelr)
+library(mgcv)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -103,4 +104,66 @@ From the plot, New York, NY has the lowest estimated OR for solving homicides co
 
 
 # Problem 3
+
+### import and clean dataset
+```{r}
+birthweight <- 
+  read_csv("./data/birthweight.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(
+    malform = factor(malform, labels = c("absent", "present")),
+    mrace = factor(mrace, labels = c("White", "Black", "Asian", "Puerto Rican")),
+    frace = factor(frace, labels = c("White", "Black", "Asian", "Puerto Rican", "Other")),
+    babysex = factor(babysex, label = c("male", "female"))) %>%
+  drop_na()
+```
+
+variable malform, mrace, frace, babysex is category variable, I convert them from numercial to factor variable. 
+
+### Regression model for birthweight
+
+```{r}
+model_1 <- lm(bwt ~ blength + gaweeks + smoken + momage + ppbmi, data = birthweight)
+birthweight %>% 
+  add_predictions(model_1) %>% 
+  add_residuals(model_1) %>% 
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point()
+```
+
+This model is based on hypothesized structure for the factors that underly birthweight, the main effect include variables: baby length and gestational age controlling for variables: number of  cigarettes smoked per day during pregnance, mother's age at deliver, and mother’s pre-pregnancy BMI. From resdiual vs fited value plot, most data are centered around residual = 0. There are few data points has residual > 1000. These data points need more investigation.
+
+### Compare models
+```{r}
+cv_df <- 
+  crossv_mc(birthweight, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df <-
+  cv_df %>% 
+  mutate(
+    main_model = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+    my_model = map(train, ~lm(bwt ~ blength + gaweeks + smoken + momage + ppbmi, data = .x)),
+    interaction_model = map(train, ~lm(bwt ~ blength * bhead * babysex , data = .x))) %>% 
+  mutate(
+    rmse_main = map2_dbl(main_model, test, ~rmse(model = .x, data = .y)),
+    rmse_my = map2_dbl(my_model, test, ~rmse(model = .x, data = .y)),
+    rmse_interaction = map2_dbl(interaction_model, test, ~rmse(model = .x, data = .y)))
+
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + 
+  geom_violin()
+```
+
+From the violin plot, the model that include all interactions clearly has higher predictive accuracy gaining by model is more complex compare to other 2 models. 
+
 
